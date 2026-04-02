@@ -5,18 +5,24 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Script che avvia tmate, cattura l'output e lo stampa chiaramente
+# Script che avvia tmate, cattura il link e lo serve via HTTP
 RUN echo '#!/bin/bash\n\
 set -e\n\
-echo "=== Avvio tmate... ===\n"\n\
-# Forza output non bufferizzato\n\
-export PYTHONUNBUFFERED=1\n\
-# Esegui tmate e stampa ogni riga\n\
-tmate -F 2>&1 | while IFS= read -r line; do\n\
-    echo "$line"\n\
-    if echo "$line" | grep -qi "ssh session"; then\n\
-        echo "🔗 LINK CONDIVISIBILE: $line"\n\
+echo "Starting tmate..." > /tmp/status.html\n\
+# Avvia tmate in background e salva l\'output\n\
+tmate -F 2>&1 | tee /tmp/tmate.log &\n\
+# Aspetta il link (max 30 secondi)\n\
+for i in {1..30}; do\n\
+    if grep -q "ssh session:" /tmp/tmate.log 2>/dev/null; then\n\
+        LINK=$(grep "ssh session:" /tmp/tmate.log | head -1)\n\
+        echo "<html><body><h1>✅ tmate pronto</h1><pre style=\"font-size:16px\">$LINK</pre><p>Condividi questo link per accedere al terminale.</p></body></html>" > /tmp/index.html\n\
+        break\n\
     fi\n\
-done' > /usr/local/bin/run-tmate && chmod +x /usr/local/bin/run-tmate
+    echo "<html><body><h1>⏳ Attendi... avvio tmate</h1><p>Il link apparirà tra pochi secondi. Ricarica la pagina.</p></body></html>" > /tmp/index.html\n\
+    sleep 1\n\
+done\n\
+# Avvia server HTTP sulla porta 8888 (richiesta da Binder)\n\
+cd /tmp\n\
+python3 -m http.server 8888' > /usr/local/bin/start.sh && chmod +x /usr/local/bin/start.sh
 
-CMD ["/usr/local/bin/run-tmate"]
+CMD ["/usr/local/bin/start.sh"]
