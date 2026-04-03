@@ -1,45 +1,25 @@
-# Usa un tag specifico (obbligatorio su Binder)
 FROM debian:bookworm-slim
 
-# Installazione dipendenze e creazione utente Binder (UID 1000)
+# Installazione dipendenze
 RUN apt-get update && \
-    apt-get install -y tmate python3 python3-minimal procps && \
+    apt-get install -y tmate python3 procps wget && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    useradd -m -u 1000 jovyan
+    rm -rf /var/lib/apt/lists/*
 
+# Crea l'utente richiesto da Binder
+RUN useradd -m -u 1000 jovyan
 USER jovyan
-ENV HOME=/home/jovyan
-WORKDIR $HOME
+WORKDIR /home/jovyan
 
-# Script ottimizzato
+# Crea lo script di avvio
 RUN echo '#!/bin/bash\n\
-set -e\n\
-# Avvia tmate in background forzando il caricamento\n\
 tmate -S /tmp/tmate.sock new-session -d\n\
 tmate -S /tmp/tmate.sock wait-for-server\n\
-\n\
-# Estrae il link SSH\n\
-for i in {1..60}; do\n\
-    LINK=$(tmate -S /tmp/tmate.sock display -p "#{tmate_ssh}")\n\
-    if [[ $LINK == *"ssh"* ]]; then\n\
-        echo "<html><body style=\"font-family:sans-serif; text-align:center; padding-top:50px;\">\n\
-              <h1>✅ Sessione tmate Attiva</h1>\n\
-              <div style=\"background:#eee; display:inline-block; padding:20px; border-radius:10px;\">\n\
-              <code style=\"font-size:18px;\">$LINK</code>\n\
-              </div>\n\
-              <p>Copia il comando sopra nel tuo terminale locale.</p>\n\
-              </body></html>" > $HOME/index.html\n\
-        break\n\
-    fi\n\
-    echo "<html><body><h1>⏳ Generazione link in corso ($i/60)...</h1><script>setTimeout(() => location.reload(), 2000)</script></body></html>" > $HOME/index.html\n\
-    sleep 2\n\
-done\n\
-\n\
-# Avvia il server sulla porta 8888 (quella che Binder espone di default)\n\
-python3 -m http.server 8888' > $HOME/start.sh && chmod +x $HOME/start.sh
+# Genera il link SSH in un file\n\
+tmate -S /tmp/tmate.sock display -p "#{tmate_ssh}" > /home/jovyan/link.txt\n\
+# Avvia un server web super semplice sulla porta 8888\n\
+echo "<html><body><h1>Copia questo comando:</h1><pre>$(cat /home/jovyan/link.txt)</pre></body></html>" > /home/jovyan/index.html\n\
+python3 -m http.server 8888' > /home/jovyan/start.sh && chmod +x /home/jovyan/start.sh
 
-# Binder richiede che la porta sia esposta
-EXPOSE 8888
-
+# Comando di avvio che Binder DEVE vedere
 CMD ["/home/jovyan/start.sh"]
