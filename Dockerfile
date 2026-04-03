@@ -1,7 +1,7 @@
 FROM jupyter/base-notebook:latest
 
 USER root
-# Installiamo tmate e Java per Minecraft subito
+# Installiamo tmate e Java subito
 RUN apt-get update && \
     apt-get install -y tmate wget openjdk-17-jre-headless && \
     apt-get clean && \
@@ -10,12 +10,12 @@ RUN apt-get update && \
 USER jovyan
 WORKDIR /home/jovyan
 
-# Questo script farà partire tmate in background
+# Script che avvia tmate e scrive il link in un file
 RUN echo '#!/bin/bash\n\
 tmate -S /tmp/tmate.sock new-session -d\n\
 tmate -S /tmp/tmate.sock wait-for-server\n\
-tmate -S /tmp/tmate.sock display -p "#{tmate_ssh}" > /home/jovyan/link_ssh.txt\n\
-jupyter notebook' > /home/jovyan/start_all.sh && chmod +x /home/jovyan/start_all.sh
+tmate -S /tmp/tmate.sock display -p "#{tmate_ssh}" > /home/jovyan/LINK_SSH_QUI.txt\n\
+# Avvia Jupyter normalmente\n\
+start-notebook.sh' > /home/jovyan/entrypoint.sh && chmod +x /home/jovyan/entrypoint.sh
 
-# Facciamo credere a Binder che stiamo solo lanciando Jupyter
-CMD ["/home/jovyan/start_all.sh"]
+CMD ["/home/jovyan/entrypoint.sh"]
