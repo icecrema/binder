@@ -1,28 +1,45 @@
+# Usa un tag specifico (obbligatorio su Binder)
 FROM debian:bookworm-slim
 
+# Installazione dipendenze e creazione utente Binder (UID 1000)
 RUN apt-get update && \
-    apt-get install -y tmate python3 python3-minimal && \
+    apt-get install -y tmate python3 python3-minimal procps && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    useradd -m -u 1000 jovyan
 
-# Script che avvia tmate, cattura il link e lo serve via HTTP
+USER jovyan
+ENV HOME=/home/jovyan
+WORKDIR $HOME
+
+# Script ottimizzato
 RUN echo '#!/bin/bash\n\
 set -e\n\
-echo "Starting tmate..." > /tmp/status.html\n\
-# Avvia tmate in background e salva l\'output\n\
-tmate -F 2>&1 | tee /tmp/tmate.log &\n\
-# Aspetta il link (max 30 secondi)\n\
-for i in {1..30}; do\n\
-    if grep -q "ssh session:" /tmp/tmate.log 2>/dev/null; then\n\
-        LINK=$(grep "ssh session:" /tmp/tmate.log | head -1)\n\
-        echo "<html><body><h1>✅ tmate pronto</h1><pre style=\"font-size:16px\">$LINK</pre><p>Condividi questo link per accedere al terminale.</p></body></html>" > /tmp/index.html\n\
+# Avvia tmate in background forzando il caricamento\n\
+tmate -S /tmp/tmate.sock new-session -d\n\
+tmate -S /tmp/tmate.sock wait-for-server\n\
+\n\
+# Estrae il link SSH\n\
+for i in {1..60}; do\n\
+    LINK=$(tmate -S /tmp/tmate.sock display -p "#{tmate_ssh}")\n\
+    if [[ $LINK == *"ssh"* ]]; then\n\
+        echo "<html><body style=\"font-family:sans-serif; text-align:center; padding-top:50px;\">\n\
+              <h1>✅ Sessione tmate Attiva</h1>\n\
+              <div style=\"background:#eee; display:inline-block; padding:20px; border-radius:10px;\">\n\
+              <code style=\"font-size:18px;\">$LINK</code>\n\
+              </div>\n\
+              <p>Copia il comando sopra nel tuo terminale locale.</p>\n\
+              </body></html>" > $HOME/index.html\n\
         break\n\
     fi\n\
-    echo "<html><body><h1>⏳ Attendi... avvio tmate</h1><p>Il link apparirà tra pochi secondi. Ricarica la pagina.</p></body></html>" > /tmp/index.html\n\
-    sleep 1\n\
+    echo "<html><body><h1>⏳ Generazione link in corso ($i/60)...</h1><script>setTimeout(() => location.reload(), 2000)</script></body></html>" > $HOME/index.html\n\
+    sleep 2\n\
 done\n\
-# Avvia server HTTP sulla porta 8888 (richiesta da Binder)\n\
-cd /tmp\n\
-python3 -m http.server 8888' > /usr/local/bin/start.sh && chmod +x /usr/local/bin/start.sh
+\n\
+# Avvia il server sulla porta 8888 (quella che Binder espone di default)\n\
+python3 -m http.server 8888' > $HOME/start.sh && chmod +x $HOME/start.sh
 
-CMD ["/usr/local/bin/start.sh"]
+# Binder richiede che la porta sia esposta
+EXPOSE 8888
+
+CMD ["/home/jovyan/start.sh"]
